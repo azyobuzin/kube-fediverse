@@ -1,0 +1,103 @@
+# Local Path Provisioner
+# https://github.com/rancher/local-path-provisioner/blob/v0.0.4/deploy/local-path-storage.yaml
+# 変更点
+# * namespaced なものには、 namespace: fediverse、そうでないものには name に「fediverse-」を付けた
+# * hostPath を /var/local/fediverse/local-path に
+# * provisioner-name を fediverse.cluster.local/local-path に
+# * resources を設定
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: local-path-provisioner-service-account
+  namespace: fediverse
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: fediverse-local-path-provisioner-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["endpoints", "persistentvolumes", "pods"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: fediverse-local-path-provisioner-bind
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fediverse-local-path-provisioner-role
+subjects:
+- kind: ServiceAccount
+  name: local-path-provisioner-service-account
+  namespace: fediverse
+---
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: local-path-provisioner
+  namespace: fediverse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: local-path-provisioner
+  template:
+    metadata:
+      labels:
+        app: local-path-provisioner
+    spec:
+      serviceAccountName: local-path-provisioner-service-account
+      containers:
+      - name: local-path-provisioner
+        image: rancher/local-path-provisioner:v0.0.4
+        imagePullPolicy: Always
+        command:
+        - local-path-provisioner
+        - --debug
+        - start
+        - --config
+        - /etc/config/config.json
+        - --namespace
+        - fediverse
+        - --provisioner-name
+        - fediverse.cluster.local/local-path
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config/
+        resources:
+          limits:
+            memory: 60Mi
+          requests:
+            memory: 25Mi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: local-path-config
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: local-path-config
+  namespace: fediverse
+data:
+  config.json: |-
+        {
+                "nodePathMap":[
+                {
+                        "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
+                        "paths":["/var/local/fediverse/local-path"]
+                }
+                ]
+        }

@@ -1,0 +1,26 @@
+# マイグレーションを実行する
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mastodon1-migration
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/role: migration
+spec:
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        fediverse/app: mastodon1
+        fediverse/role: migration
+    spec:
+      containers:
+        - name: mastodon1-migration
+          image: tootsuite/mastodon:v2.7.4
+          command: [/bin/sh, -c, rake db:migrate]
+          envFrom:
+            - configMapRef:
+                name: mastodon1-env
+      restartPolicy: OnFailure
+  ttlSecondsAfterFinished: 1000

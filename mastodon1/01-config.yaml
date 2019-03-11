@@ -1,0 +1,21 @@
+# 共有環境変数
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mastodon1-env
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+data:
+  REDIS_HOST: mastodon1-redis
+  DB_HOST: mastodon1-db
+  DB_USER: postgres
+  DB_NAME: postgres
+  LOCAL_DOMAIN: mastodon1.fediverse.local.azyobuzi.net
+  LOCAL_HTTPS: "true"
+  STREAMING_API_BASE_URL: wss://mastodon1.fediverse.local.azyobuzi.net
+  # 初回起動時に自動生成して Secret として保存したい気持ちがある
+  SECRET_KEY_BASE: 2180b66d9d0f15da3269963fb73b480785d873ffb649d8d212ce33f02516ce4e21d0a36afd74d2af10b61dbce9e0226c6820675fee7c72c63dcfa2f198f0ca31
+  OTP_SECRET: 6f6adf527790b3fce40134a1a5427a85018fb67deb13e65eed527306d735229c99411285800e2e7eb4d48e351a32e5c616047353c879f7927e26283367e50ce4
+  VAPID_PRIVATE_KEY: 97LNd3FiD8l4f1v-nTJBeJUuwJTT1VJVg7u7FBWPINw=
+  VAPID_PUBLIC_KEY: BGZd9noi8g2lccJfa7Nh0CBKKcIaDhjpatmdvlK3SJF2qqEaGTiNFvRTttYeX7C630brL2kO2SsVFEWx5fdxo3s=

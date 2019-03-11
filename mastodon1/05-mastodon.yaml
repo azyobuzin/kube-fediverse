@@ -1,0 +1,317 @@
+# 共通ボリューム
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mastodon1-system
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/role: app
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: fediverse-appdata
+
+---
+
+# MateProxy の設定
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mastodon1-proxyconfig
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+data:
+  appsettings.json: |
+    {
+      "ExcludePathPatterns": [
+        "\\.(js|css|svg|jpg|png|ico)$",
+        "^/($|system|packs|web|about|terms|@|explore|settings|admin)"
+      ],
+      "ExcludeHeaderPatterns": [
+        {
+          "Referer": "."
+        }
+      ],
+      "Storage": "Redis",
+      "RedisConnectionConfiguration": "mastodon1-redis",
+      "Routes": [
+        {
+          "Name": "streaming",
+          "Path": "/api/v1/streaming",
+          "Upstream": "http://127.0.0.1:4000/api/v1/streaming",
+          "CopyXForwardedHeaders": true,
+          "AddXForwardedHeaders": false,
+          "HostHeaderMode": "FirstXForwardedHost"
+        },
+        {
+          "Name": "web",
+          "Path": "/",
+          "Upstream": "http://127.0.0.1:3000",
+          "CopyXForwardedHeaders": true,
+          "AddXForwardedHeaders": false,
+          "HostHeaderMode": "FirstXForwardedHost"
+        }
+      ]
+    }
+
+---
+
+# 本体
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mastodon1-app
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: app
+    fediverse/role: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      fediverse/app: mastodon1
+      fediverse/name: app
+  strategy:
+    # 本来ならば RollingUpdate にするべきだけれど、重すぎる
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        fediverse/app: mastodon1
+        fediverse/name: app
+        fediverse/role: app
+    spec:
+      containers:
+        - name: mastodon1-web
+          image: azyobuzin/mastodon:v2.7.4-development
+          imagePullPolicy: Always
+          args:
+            - bash
+            - -c
+            - rm -f /mastodon/tmp/pids/server.pid; bundle exec rails s -p 3000 -b '0.0.0.0'
+          env:
+            # 開発環境に性能を求めるな
+            - name: MAX_THREADS
+              value: "2"
+            - name: WEB_CONCURRENCY
+              value: "1"
+            # Better Erros が Rack に流れる IP アドレスの形式を読み取れずに落ちるので、 IP アドレス検証を無効化
+            # https://github.com/azyobuzin/mastodon/commit/48e4246d627c8bd030c168f760edb97def179956
+            - name: USE_BETTER_ERRORS_FROM_ANY_IP
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: mastodon1-env
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              httpHeaders:
+                - name: x-forwarded-proto
+                  value: https
+              path: /api/v1/instance
+              port: 3000
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+          resources:
+            limits:
+              memory: 500Mi
+            requests:
+              memory: 200Mi
+          volumeMounts:
+            - name: system
+              mountPath: /mastodon/public/system
+            - name: fediverse-cert
+              mountPath: /usr/local/share/ca-certificates
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+        - name: mastodon1-streaming
+          image: azyobuzin/mastodon:v2.7.4-development
+          imagePullPolicy: Always
+          args: [yarn, start]
+          env:
+            - name: STREAMING_CLUSTER_NUM
+              value: "1"
+          envFrom:
+            - configMapRef:
+                name: mastodon1-env
+          ports:
+            - containerPort: 4000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              httpHeaders:
+                - name: x-forwarded-proto
+                  value: https
+              path: /api/v1/streaming/health
+              port: 4000
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+          resources:
+            limits:
+              memory: 200Mi
+            requests:
+              memory: 80Mi
+          volumeMounts:
+            - name: fediverse-cert
+              mountPath: /usr/local/share/ca-certificates
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+        - name: mastodon1-proxy
+          image: azyobuzin/mateproxy:latest
+          imagePullPolicy: Always
+          command:
+            - /bin/sh
+            - -c
+            - ln -s /etc/mateproxy/appsettings.json ./appsettings.json && dotnet MateProxy.dll
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              httpHeaders:
+                - name: Accept
+                  value: text/html
+              path: /rin/
+              port: 80
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+          resources:
+            limits:
+              memory: 200Mi
+            requests:
+              memory: 70Mi
+          volumeMounts:
+            - name: proxyconfig
+              mountPath: /etc/mateproxy
+      initContainers:
+        # Ingress で使用している証明書を信頼できる認証局としてインストールする
+        - name: cert-installer
+          image: azyobuzin/mastodon:v2.7.4-development
+          imagePullPolicy: Always
+          command: [/usr/sbin/update-ca-certificates]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: fediverse-cert
+              mountPath: /usr/local/share/ca-certificates
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+      volumes:
+        - name: system
+          persistentVolumeClaim:
+            claimName: mastodon1-system
+        - name: fediverse-cert
+          secret:
+            secretName: fediverse-cert
+            items:
+              - key: tls.crt
+                path: fediverse.crt
+        - name: ssl-certs
+          emptyDir:
+        - name: proxyconfig
+          configMap:
+            name: mastodon1-proxyconfig
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mastodon1-app
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: app
+    fediverse/role: app
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  selector:
+    fediverse/app: mastodon1
+    fediverse/name: app
+
+---
+
+# Sidekiq
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mastodon1-sidekiq
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: sidekiq
+    fediverse/role: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      fediverse/app: mastodon1
+      fediverse/name: sidekiq
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        fediverse/app: mastodon1
+        fediverse/name: sidekiq
+        fediverse/role: worker
+    spec:
+      containers:
+        - name: mastodon1-sidekiq
+          image: azyobuzin/mastodon:v2.7.4-development
+          imagePullPolicy: Always
+          args: [bundle, exec, sidekiq]
+          envFrom:
+            - configMapRef:
+                name: mastodon1-env
+          resources:
+            requests:
+              memory: 250Mi
+          volumeMounts:
+            - name: system
+              mountPath: /mastodon/public/system
+            - name: fediverse-cert
+              mountPath: /usr/local/share/ca-certificates
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+      initContainers:
+        # Ingress で使用している証明書を信頼できる認証局としてインストールする
+        - name: cert-installer
+          image: azyobuzin/mastodon:v2.7.4-development
+          imagePullPolicy: Always
+          command: [/usr/sbin/update-ca-certificates]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: fediverse-cert
+              mountPath: /usr/local/share/ca-certificates
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+      volumes:
+        - name: system
+          persistentVolumeClaim:
+            claimName: mastodon1-system
+        - name: fediverse-cert
+          secret:
+            secretName: fediverse-cert
+            items:
+              - key: tls.crt
+                path: fediverse.crt
+        - name: ssl-certs
+          emptyDir:

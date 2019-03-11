@@ -1,0 +1,27 @@
+# https://github.com/kubernetes-incubator/external-storage/blob/nfs-provisioner-v2.2.1-k8s1.12/nfs/deploy/kubernetes/psp.yaml
+# 変更点
+# * name に「fediverse-」を付けた
+
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: fediverse-nfs-provisioner
+spec:
+  fsGroup:
+    rule: RunAsAny
+  allowedCapabilities:
+  - DAC_READ_SEARCH
+  - SYS_RESOURCE
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - secret
+  - hostPath

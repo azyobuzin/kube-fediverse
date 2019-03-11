@@ -1,0 +1,18 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: mastodon1
+  namespace: fediverse
+  annotations:
+    traefik.ingress.kubernetes.io/redirect-entry-point: https
+spec:
+  rules:
+    - host: mastodon1.fediverse.local.azyobuzi.net
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: mastodon1-app
+              servicePort: http
+  tls:
+    - secretName: fediverse-cert

@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mastodon1-internal
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+spec:
+  podSelector:
+    matchLabels:
+      fediverse/app: mastodon1
+  egress:
+    # クラスタ内への通信を許可（クラスタ外への通信を禁止）
+    - to:
+        - ipBlock:
+            cidr: 10.42.0.0/15
+  policyTypes: [Egress]

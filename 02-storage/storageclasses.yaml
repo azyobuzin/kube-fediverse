@@ -1,0 +1,22 @@
+# データベース用のストレージ
+# 高速さが求められるので、ローカルに割り当てる
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fediverse-database
+provisioner: fediverse.cluster.local/local-path
+volumeBindingMode: WaitForFirstConsumer
+
+---
+
+# 画像とかのデータ用ストレージ
+# 適当に NFS で
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fediverse-appdata
+provisioner: fediverse.cluster.local/nfs
+mountOptions:
+  - vers=4.1

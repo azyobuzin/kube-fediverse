@@ -1,0 +1,175 @@
+# PostgreSQL
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mastodon1-db
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: db
+    fediverse/role: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: fediverse-database
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mastodon1-db
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: db
+    fediverse/role: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      fediverse/app: mastodon1
+      fediverse/name: db
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        fediverse/app: mastodon1
+        fediverse/name: db
+        fediverse/role: database
+    spec:
+      containers:
+        - name: mastodon1-db
+          image: postgres:9.6-alpine
+          livenessProbe:
+            exec:
+              command: [/bin/sh, -c, pg_isready -U postgres]
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          resources:
+            requests:
+              memory: 70Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mastodon1-db
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mastodon1-db
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: db
+    fediverse/role: database
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      protocol: TCP
+      port: 5432
+      targetPort: 5432
+  selector:
+    fediverse/app: mastodon1
+    fediverse/name: db
+
+---
+
+# Redis
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mastodon1-redis
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: redis
+    fediverse/role: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Mi
+  storageClassName: fediverse-database
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mastodon1-redis
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: redis
+    fediverse/role: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      fediverse/app: mastodon1
+      fediverse/name: redis
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        fediverse/app: mastodon1
+        fediverse/name: redis
+        fediverse/role: database
+    spec:
+      containers:
+        - name: mastodon1-redis
+          image: redis:4.0-alpine
+          livenessProbe:
+            exec:
+              command: [/bin/sh, -c, redis-cli ping]
+          ports:
+            - containerPort: 6379
+              protocol: TCP
+          resources:
+            requests:
+              memory: 10Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mastodon1-redis
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mastodon1-redis
+  namespace: fediverse
+  labels:
+    fediverse/app: mastodon1
+    fediverse/name: redis
+    fediverse/role: database
+spec:
+  clusterIP: None
+  ports:
+    - name: redis
+      protocol: TCP
+      port: 6379
+      targetPort: 6379
+  selector:
+    fediverse/app: mastodon1
+    fediverse/name: redis
