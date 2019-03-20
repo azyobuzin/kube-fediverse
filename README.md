@@ -1,7 +1,7 @@
 # kube-fediverse
 Kubernetes でつくる隔離 ActivityPub ネットワーク
 
-TODO: ここにブログへのリンク
+- [Kubernetesで隔離Mastodonネットワークを作った - アジョブジ星通信](https://azyobuzin.hatenablog.com/entry/2019/03/21/024504)
 
 ## このリポジトリは何？
 通信が外に漏れださないように Network Policy を設定した、 Mastodon コンテナを動かすための Kubernetes リソースの YAML 群です。
