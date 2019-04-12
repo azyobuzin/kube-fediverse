@@ -15,9 +15,38 @@ spec:
         fediverse/app: mastodon1
         fediverse/role: migration
     spec:
+      initContainers:
+        - name: create-database
+          image: postgres:11.2-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              psql -tc "SELECT 1 FROM pg_user WHERE usename = '$(DB_USER)'" | grep -q 1 || createuser '$(DB_USER)'
+              psql -tc "SELECT 1 FROM pg_database WHERE datname = '$(DB_NAME)'" | grep -q 1 || createdb --owner '$(DB_USER)' '$(DB_NAME)'
+              psql -tc "SELECT 1 FROM pg_database WHERE datname = '$(DB_NAME)_test'" | grep -q 1 || createdb --owner '$(DB_USER)' '$(DB_NAME)_test'
+          env:
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: mastodon1-env
+                  key: DB_USER
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: mastodon1-env
+                  key: DB_NAME
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: mastodon1-env
+                  key: DB_HOST
+            - name: PGUSER
+              value: postgres
       containers:
-        - name: mastodon1-migration
-          image: tootsuite/mastodon:v2.7.4
+        - name: migration
+          image: azyobuzin/mastodon:v2.7.4-development
+          imagePullPolicy: Always
           command: [/bin/sh, -c, rake db:migrate]
           envFrom:
             - configMapRef:
